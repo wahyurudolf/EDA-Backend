@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from contextlib import asynccontextmanager
 
-from app.api.routes import upload, eda
+from app.api.routes import upload, eda, clean
 from app.services.cleanup_task import cleanup_old_files
 
 # Lifespan untuk menjalankan background task (Cleanup) saat server menyala
@@ -29,6 +29,7 @@ app.add_middleware(
 # Mendaftarkan Endpoint dari folder routes
 app.include_router(upload.router, prefix="/api", tags=["Upload"])
 app.include_router(eda.router, prefix="/api", tags=["Exploration"])
+app.include_router(clean.router, prefix="/api", tags=["Action"])
 
 @app.get("/")
 def read_root():

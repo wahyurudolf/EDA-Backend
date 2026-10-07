@@ -4,6 +4,8 @@ from app.db.database import get_db
 from app.models.file_model import FileRecord
 from app.services.data_engine import perform_eda_polars
 from app.schemas.eda_schema import EDAMetricsResponse
+from app.services.query_engine import get_paginated_data
+from typing import List, Dict, Any
 
 router = APIRouter()
 
@@ -32,3 +34,20 @@ def analyze_data(file_id: int, db: Session = Depends(get_db)):
         return eda_results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gagal memproses data: {str(e)}")
+
+@router.get("/data/{file_id}", response_model=List[Dict[str, Any]])
+def preview_data(file_id: int, page: int = 1, limit: int = 50, db: Session = Depends(get_db)):
+    """
+    Endpoint untuk Data Preview.
+    Contoh penggunaan di Flutter: /api/data/123?page=2&limit=50
+    """
+    file_record = db.query(FileRecord).filter(FileRecord.id == file_id, FileRecord.is_deleted == False).first()
+    if not file_record:
+        raise HTTPException(status_code=404, detail="File tidak ditemukan.")
+
+    offset = (page - 1) * limit
+    try:
+        data = get_paginated_data(file_record.local_path, limit, offset)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gagal memuat tabel: {str(e)}")

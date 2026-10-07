@@ -1,6 +1,7 @@
 import polars as pl
 import os
 from typing import Dict, Any
+import re
 
 def calculate_data_quality_score(total_rows: int, total_missing: int, total_duplicates: int) -> float:
     """
@@ -57,7 +58,7 @@ def perform_eda_polars(file_path: str, file_id: int) -> Dict[str, Any]:
     describe_df = df.describe()
     
     for col_name in df.columns:
-        col_type = str(df[col_name].dtype)
+        col_type = detect_smart_type(df[col_name])
         
         # Ekstrak metrik spesifik untuk kolom dari dataframe describe
         col_stats = describe_df.filter(pl.col("statistic").is_in(["mean", "min", "max", "std"]))
@@ -108,3 +109,33 @@ def perform_eda_polars(file_path: str, file_id: int) -> Dict[str, Any]:
         "missing_values": missing_dict,
         "duplicate_rows": duplicate_rows
     }
+
+def detect_smart_type(series: pl.Series) -> str:
+    """
+    Menganalisis sampel kolom untuk menentukan konteks (Smart Type Recognition).
+    Mengenali format Tanggal, Mata Uang, atau tipe default.
+    """
+    original_type = str(series.dtype)
+    
+    # Ambil 5 sampel data pertama yang tidak kosong
+    sample_data = series.drop_nulls().head(5).to_list()
+    if not sample_data:
+        return original_type
+
+    if "String" in original_type:
+        # Deteksi pola Tanggal (DD-MM-YYYY, YYYY-MM-DD, dll)
+        date_pattern = re.compile(r'^\d{2,4}[-/]\d{2}[-/]\d{2,4}')
+        if all(isinstance(x, str) and date_pattern.search(x) for x in sample_data):
+            return "Tanggal (Date)"
+            
+        # Deteksi Uang / Currency (misal: $ 1000 atau Rp 50.000)
+        currency_pattern = re.compile(r'^[$€£Rp]\s?\d+(?:[.,]\d+)*')
+        if all(isinstance(x, str) and currency_pattern.search(x) for x in sample_data):
+            return "Mata Uang (Currency)"
+            
+    if "Float" in original_type:
+        # Cek apakah mungkin sebuah Koordinat (antara -180 sampai 180)
+        if all(isinstance(x, (int, float)) and -180.0 <= x <= 180.0 for x in sample_data):
+            return "Float (Kemungkinan Koordinat)"
+
+    return original_type
